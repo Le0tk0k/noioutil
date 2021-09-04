@@ -30,6 +30,9 @@ func Run(fileName string) error {
 	}
 
 	start := bytes.Index(src, importStartFlag)
+	if start < 0 {
+		return nil
+	}
 	end := bytes.Index(src[start:], importEndFlag) + start
 	pkgs := src[start+len(importStartFlag) : end]
 
@@ -39,7 +42,7 @@ func Run(fileName string) error {
 	}
 
 	if useIoutil {
-		return fmt.Errorf("use \"io/ioutil\" package in %s", fileName)
+		return fmt.Errorf("use \"io/ioutil\" package in %s\n", fileName)
 	}
 	return nil
 }
