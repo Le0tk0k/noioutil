@@ -31,7 +31,8 @@ func main() {
 ```
 
 ```
-$ go vet -vettool=$(which noioutil) ./...
-noioutil: "io/ioutil" package is used in ./main.go
+$ go vet -vettool=$(which noioutil) main.go
+# command-line-arguments
+./main.go:5:2: "io/ioutil" package is used
 ```
 
