@@ -1,14 +1,12 @@
 package noioutil
 
 import (
-	"bytes"
-	"fmt"
-	"io/ioutil"
-	"os"
-	"strings"
+	"go/ast"
+	"go/token"
 
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/inspect"
+	"golang.org/x/tools/go/ast/inspector"
 )
 
 const doc = "noioutil finds files using the io/ioutil package."
@@ -24,56 +22,36 @@ var Analyzer = &analysis.Analyzer{
 }
 
 func run(pass *analysis.Pass) (interface{}, error) {
-	var fileNames []string
-	for _, f := range pass.Files {
-		pos := pass.Fset.PositionFor(f.Pos(), false)
-		fileNames = append(fileNames, pos.Filename)
+	inspect := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
+
+	nodeFilter := []ast.Node{
+		(*ast.File)(nil),
 	}
 
-	for _, f := range fileNames {
-		err := processFile(f)
-		if err != nil {
-			return nil, err
+	inspect.Preorder(nodeFilter, func(n ast.Node) {
+		switch n := n.(type) {
+		case *ast.File:
+			fileName := n.Name.Name
+			for _, f := range n.Decls {
+				switch decl := f.(type) {
+				case *ast.GenDecl:
+					if decl.Tok == token.IMPORT {
+						checkImport(pass, decl, fileName)
+					}
+				}
+			}
 		}
-	}
+	})
+
 	return nil, nil
 }
 
-var (
-	importStartFlag = []byte(`
-import (
-`)
-	importEndFlag = []byte(`
-)
-`)
-)
-
-func processFile(fileName string) error {
-	f, err := os.Open(fileName)
-	if err != nil {
-		return err
+func checkImport(pass *analysis.Pass, decl *ast.GenDecl, fileName string) {
+	for _, spec := range decl.Specs {
+		if spec, ok := spec.(*ast.ImportSpec); ok {
+			if spec.Path.Value == `"io/ioutil"` {
+				pass.Reportf(spec.Path.Pos(), "\"io/ioutil\" package is used")
+			}
+		}
 	}
-	defer f.Close()
-
-	src, err := ioutil.ReadAll(f)
-	if err != nil {
-		return err
-	}
-
-	start := bytes.Index(src, importStartFlag)
-	if start < 0 {
-		return nil
-	}
-	end := bytes.Index(src[start:], importEndFlag) + start
-	pkgs := src[start+len(importStartFlag) : end]
-
-	var useIoutil bool
-	if strings.Contains(string(pkgs), "io/ioutil") {
-		useIoutil = true
-	}
-
-	if useIoutil {
-		return fmt.Errorf("\"io/ioutil\" package is used in %s", fileName)
-	}
-	return nil
 }
